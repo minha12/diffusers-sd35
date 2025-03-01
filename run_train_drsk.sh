@@ -10,7 +10,7 @@ module load Miniforge3
 # Activate conda environment
 mamba activate diffusers  # Replace with your env name
 
-export MODEL_DIR="stabilityai/stable-diffusion-3.5-medium-diffusers"
+export MODEL_DIR="/proj/berzelius-2023-296/users/x_lemin/models/stabilityai/stable-diffusion-3.5-medium-diffusers"
 export OUTPUT_DIR="sd3.5-controlnet-out-drsk"
 export DATASET_DIR="/proj/berzelius-2023-296/users/x_lemin/pathology-datasets/DRSK"
 export CACHE_DIR="/proj/berzelius-2023-296/users/x_lemin/pathology-datasets/DRSK/dataset-cache-sd3.5"
