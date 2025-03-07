@@ -1,0 +1,12 @@
+Prompt: pathology image of skin with a focus on the dermis and skin appendage structures
+Model path: /proj/berzelius-2023-296/users/x_lemin/models/stabilityai/stable-diffusion-3.5-medium-diffusers
+Image size: 2048x2048
+Patch size: 512
+Overlap ratio: 4 (overlap = 128 pixels)
+Guidance scale: 5.0
+Sampling steps: 30
+Seed: None
+Tile order: corner_to_center
+Region prompt: True
+Hann blending: False
+Generation time: 533.95 seconds
