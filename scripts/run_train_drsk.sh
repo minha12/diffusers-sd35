@@ -15,7 +15,7 @@ export OUTPUT_DIR="sd3.5-controlnet-out-drsk"
 export DATASET_DIR="/proj/berzelius-2023-296/users/x_lemin/pathology-datasets/DRSK"
 export CACHE_DIR="/proj/berzelius-2023-296/users/x_lemin/pathology-datasets/DRSK/dataset-cache-sd3.5"
 
-accelerate launch --config_file accelerate_config.yaml train_controlnet_sd3.py \
+accelerate launch --config_file accelerate_config.yaml train_controlnet_sd35.py \
     --pretrained_model_name_or_path=$MODEL_DIR \
     --output_dir=$OUTPUT_DIR \
     --train_data_dir=$DATASET_DIR \
