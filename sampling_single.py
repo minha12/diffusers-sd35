@@ -9,7 +9,7 @@ from diffusers import (
     SD3Transformer2DModel,
 )
 from transformers import CLIPTokenizer, T5TokenizerFast
-from train_controlnet_sd3 import import_model_class_from_model_name_or_path
+from train_controlnet_sd35 import import_model_class_from_model_name_or_path
 from SD35SinglePatch import sd3_controlnet_inference
 
 def load_models(model_path, controlnet_path, device="cuda", dtype=torch.float16):
