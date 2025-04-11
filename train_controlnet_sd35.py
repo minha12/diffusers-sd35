@@ -1421,17 +1421,26 @@ def parse_args(input_args=None):
         default=None,
         help="Directory to store the dataset cache files. If not specified, will use the default cache directory.",
     )
+    parser.add_argument(
+        "--dataset_script_path",
+        type=str,
+        default=None,
+        help="Path to a custom dataset script to use instead of dataset_name/train_data_dir. When specified, train_data_dir becomes data_dir parameter.",
+    )
 
     if input_args is not None:
         args = parser.parse_args(input_args)
     else:
         args = parser.parse_args()
 
-    if args.dataset_name is None and args.train_data_dir is None:
-        raise ValueError("Specify either `--dataset_name` or `--train_data_dir`")
+    if args.dataset_script_path is not None:
+        if args.dataset_name is not None:
+            logger.warning("dataset_name is ignored when dataset_script_path is provided")
+    elif args.dataset_name is None and args.train_data_dir is None:
+        raise ValueError("Specify either `--dataset_name`, `--train_data_dir`, or `--dataset_script_path`")
 
-    if args.dataset_name is not None and args.train_data_dir is not None:
-        raise ValueError("Specify only one of `--dataset_name` or `--train_data_dir`")
+    if args.dataset_name is not None and args.train_data_dir is not None and args.dataset_script_path is None:
+        raise ValueError("Specify only one of `--dataset_name` or `--train_data_dir` when not using dataset_script_path")
 
     if args.proportion_empty_prompts < 0 or args.proportion_empty_prompts > 1:
         raise ValueError("`--proportion_empty_prompts` must be in the range [0, 1].")
