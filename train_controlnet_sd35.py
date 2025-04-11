@@ -738,16 +738,46 @@ def main(args):
         # details: https://github.com/huggingface/diffusers/pull/4038#discussion_r1266078401
         # new_fingerprint = Hasher.hash(args)
         # Debug info before mapping
-        fingerprint = get_stable_cache_key(args)
-        logger.info("Starting dataset mapping with fingerprint: %s", fingerprint)
-        logger.info("Dataset size before mapping: %d", len(train_dataset))
 
-        # Generate cache filename based on fingerprint
+        def find_existing_cache_file(cache_dir, prefix="cache_"):
+            """Find an existing cache file in the provided directory that matches the prefix."""
+            if not cache_dir or not os.path.isdir(cache_dir):
+                return None
+            
+            cache_files = [f for f in os.listdir(cache_dir) if f.startswith(prefix) and f.endswith('.arrow')]
+            if not cache_files:
+                return None
+            
+            # Return most recent cache file based on modification time
+            cache_files.sort(key=lambda f: os.path.getmtime(os.path.join(cache_dir, f)), reverse=True)
+            return os.path.join(cache_dir, cache_files[0])
+
+        # Generate fingerprint but check for existing cache first
+        fingerprint = None
+        cache_file = None
+
         if args.dataset_cache_dir:
-            cache_file = os.path.join(args.dataset_cache_dir, f"cache_{fingerprint}.arrow")
-        else:
-            cache_file = None
+            # Look for existing cache files
+            existing_cache = find_existing_cache_file(args.dataset_cache_dir)
+            if existing_cache:
+                # Extract fingerprint from filename (cache_{fingerprint}.arrow)
+                cache_filename = os.path.basename(existing_cache)
+                if cache_filename.startswith("cache_") and cache_filename.endswith(".arrow"):
+                    fingerprint = cache_filename[6:-6]  # Remove "cache_" and ".arrow"
+                    cache_file = existing_cache
+                    logger.info(f"Found existing cache file with fingerprint: {fingerprint}")
 
+        # If no existing cache was found, generate a new fingerprint
+        if not fingerprint:
+            fingerprint = get_stable_cache_key(args)
+            if args.dataset_cache_dir:
+                cache_file = os.path.join(args.dataset_cache_dir, f"cache_{fingerprint}.arrow")
+
+        # Debug info
+        logger.info(f"Using fingerprint: {fingerprint}")
+        logger.info(f"Dataset size before mapping: {len(train_dataset)}")
+
+        # Use the fingerprint and cache file in the map operation
         train_dataset = train_dataset.map(
             compute_embeddings_fn,
             batched=True,
