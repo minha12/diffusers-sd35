@@ -20,5 +20,6 @@ accelerate launch --config_file accelerate_config.yaml train_controlnet_sd35.py 
     --validation_steps=300 \
     --num_validation_images=4 \
     --train_batch_size=2 \
-    --gradient_accumulation_steps=4
+    --gradient_accumulation_steps=4 \
+    --use_8bit_adam
 
