@@ -1,19 +1,10 @@
 #!/bin/bash
-#SBATCH -A berzelius-2024-460 
-#SBATCH --gpus 2
-#SBATCH -C fat
-#SBATCH -t 3-00:00:00
 
-# Load modules
-module load Miniforge3
-
-# Activate conda environment
-mamba activate diffusers  # Replace with your env name
-
-export MODEL_DIR="/proj/berzelius-2023-296/users/x_lemin/models/stabilityai/stable-diffusion-3.5-medium-diffusers"
+export BASE_DIR="/home/ubuntu"
+export MODEL_DIR="${BASE_DIR}/models/stabilityai/stable-diffusion-3-medium-diffusers"
 export OUTPUT_DIR="sd3.5-controlnet-out-drsk"
-export DATASET_DIR="/proj/berzelius-2023-296/users/x_lemin/pathology-datasets/DRSK"
-export CACHE_DIR="/proj/berzelius-2023-296/users/x_lemin/pathology-datasets/DRSK/dataset-cache-sd3.5"
+export CACHE_DIR="${BASE_DIR}/datasets/drsk/cache-sd3.5-full"
+export DATASET_DIR="${BASE_DIR}/datasets/drsk/"
 
 accelerate launch --config_file accelerate_config.yaml train_controlnet_sd35.py \
     --pretrained_model_name_or_path=$MODEL_DIR \
