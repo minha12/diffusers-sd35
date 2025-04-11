@@ -6,3 +6,4 @@ Jinja2
 datasets
 wandb
 sentencepiece
+bitsandbytes
