@@ -215,7 +215,16 @@ def make_train_dataset(args, tokenizer_one, tokenizer_two, tokenizer_three, acce
 
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
-    if args.dataset_name is not None:
+    if args.dataset_script_path is not None:
+        # Use explicit script path with data_dir parameter
+        logger.info(f"Loading dataset from script: {args.dataset_script_path}")
+        dataset = load_dataset(
+            args.dataset_script_path,
+            data_dir=args.train_data_dir,
+            cache_dir=args.cache_dir,
+            trust_remote_code=True,
+        )
+    elif args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         dataset = load_dataset(
             args.dataset_name,
@@ -228,8 +237,6 @@ def make_train_dataset(args, tokenizer_one, tokenizer_two, tokenizer_three, acce
                 args.train_data_dir,
                 cache_dir=args.cache_dir,
             )
-        # See more about loading custom images at
-        # https://huggingface.co/docs/datasets/v2.0.0/en/dataset_script
 
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
