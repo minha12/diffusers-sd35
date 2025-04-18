@@ -17,7 +17,7 @@ accelerate launch --config_file accelerate_config.yaml src/training/train_contro
     --learning_rate=1e-5 \
     --dataset_preprocess_batch_size=64 \
     --max_train_steps=15000 \
-    --validation_image "./validation_images/control_image_1.png" "./validation_images/control_image_2.png" \
+    --validation_image "./data/validation_images/control_image_1.png" "./data/validation_images/control_image_2.png" \
     --validation_prompt "pathology image: tissue unknown 12.73%, dermis normal skin 22.91%, skin appendage structure normal skin 61.62%" "pathology image: dermis normal skin 47.76%, skin appendage structure normal skin 51.06%" \
     --validation_steps=300 \
     --num_validation_images=4 \
