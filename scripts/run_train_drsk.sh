@@ -7,7 +7,7 @@ export CACHE_DIR="${BASE_DIR}/datasets/drsk/cache-sd3.5-full"
 export DATASET_DIR="${BASE_DIR}/datasets/drsk"
 export SCRIPT_PATH="./scripts/drsk.py"
 
-accelerate launch --config_file accelerate_config.yaml train_controlnet_sd35.py \
+accelerate launch --config_file accelerate_config.yaml src/training/train_controlnet_sd35.py \
     --pretrained_model_name_or_path=$MODEL_DIR \
     --output_dir=$OUTPUT_DIR \
     --train_data_dir=$DATASET_DIR \

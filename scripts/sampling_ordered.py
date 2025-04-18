@@ -6,6 +6,8 @@ import torch
 import numpy as np
 from PIL import Image
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 from diffusers import (
     AutoencoderKL,
     FlowMatchEulerDiscreteScheduler,
@@ -15,7 +17,7 @@ from diffusers import (
 )
 from transformers import CLIPTokenizer, T5TokenizerFast
 
-from SD35OrderedPatching import SD3MultiTieDiffusion, save_tensor_as_png
+from src.inference.SD35OrderedPatching import SD3MultiTileDiffusion, save_tensor_as_png
 
 def load_models(
     model_path, 
@@ -169,7 +171,7 @@ def main(
                 print(f"ControlNet config keys: {list(pipeline.controlnet.config.keys())}")
     
     # Initialize the multi-tile diffusion model
-    multi_tile_diffusion = SD3MultiTieDiffusion(
+    multi_tile_diffusion = SD3MultiTileDiffusion(
         pipeline=pipeline,
         patch_size=patch_size,
         sampling_steps=sampling_steps,

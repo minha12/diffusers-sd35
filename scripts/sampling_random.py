@@ -6,6 +6,8 @@ import torch
 import numpy as np
 from PIL import Image
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 from diffusers import (
     AutoencoderKL,
     FlowMatchEulerDiscreteScheduler,
@@ -15,7 +17,7 @@ from diffusers import (
 )
 from transformers import CLIPTokenizer, T5TokenizerFast
 
-from SD35RandomPatching import SD3RandomDiffusion, save_tensor_as_png
+from src.inference.SD35RandomPatching import SD3RandomDiffusion, save_tensor_as_png
 
 def load_models(
     model_path, 

@@ -7,7 +7,7 @@ import torchvision.transforms as T
 import logging
 import copy
 
-class SD3MultiTieDiffusion:
+class SD3MultiTileDiffusion:
     """
     Enables tiled generation of large images using a patch-by-patch approach.
     """

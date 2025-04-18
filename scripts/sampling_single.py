@@ -1,7 +1,11 @@
+import sys
 import torch
 import fire
 from PIL import Image
 import os
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 from diffusers import (
     AutoencoderKL,
     FlowMatchEulerDiscreteScheduler,
@@ -9,8 +13,8 @@ from diffusers import (
     SD3Transformer2DModel,
 )
 from transformers import CLIPTokenizer, T5TokenizerFast
-from utils import import_model_class_from_model_name_or_path
-from SD35SinglePatch import sd3_controlnet_inference
+from src.utils.utils import import_model_class_from_model_name_or_path
+from src.inference.SD35SinglePatch import sd3_controlnet_inference
 
 def load_models(model_path, controlnet_path, device="cuda", dtype=torch.float16):
     """Load all required models for SD3 ControlNet inference"""

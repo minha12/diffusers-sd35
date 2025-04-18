@@ -6,6 +6,9 @@ import math
 import os
 import shutil
 from pathlib import Path
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 import accelerate
 import torch
@@ -31,10 +34,10 @@ from diffusers.training_utils import compute_density_for_timestep_sampling, comp
 from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.torch_utils import is_compiled_module
 
-from log_validation import log_validation
-from make_train_dataset import make_train_dataset
-from parse_args import parse_args
-from utils import collate_fn, encode_prompt, import_model_class_from_model_name_or_path, load_text_encoders, save_model_card
+from src.utils.log_validation import log_validation
+from src.utils.make_train_dataset import make_train_dataset
+from src.utils.parse_args import parse_args
+from src.utils.utils import collate_fn, encode_prompt, import_model_class_from_model_name_or_path, load_text_encoders, save_model_card
 
 
 if is_wandb_available():
@@ -44,10 +47,6 @@ check_min_version("0.33.0.dev0")
 
 logger = get_logger(__name__)
 
-
-# Copied from dreambooth sd3 example
-# Copied from dreambooth sd3 example
-# Copied from dreambooth sd3 example
 def main(args):
     if args.report_to == "wandb" and args.hub_token is not None:
         raise ValueError(
@@ -522,24 +521,6 @@ def main(args):
         while len(sigma.shape) < n_dim:
             sigma = sigma.unsqueeze(-1)
         return sigma
-
-    # def get_sigmas(timesteps, n_dim=4, dtype=weight_dtype):
-    #     sigmas = noise_scheduler_copy.sigmas.to(device=accelerator.device, dtype=dtype)
-    #     schedule_timesteps = noise_scheduler_copy.timesteps.to(accelerator.device)
-    #     timesteps = timesteps.to(accelerator.device)
-        
-    #     # Use a safer approach to find indices
-    #     step_indices = []
-    #     for t in timesteps:
-    #         # Find the closest timestep in schedule_timesteps
-    #         differences = torch.abs(schedule_timesteps - t)
-    #         index = torch.argmin(differences).item()
-    #         step_indices.append(index)
-
-    #     sigma = sigmas[step_indices].flatten()
-    #     while len(sigma.shape) < n_dim:
-    #         sigma = sigma.unsqueeze(-1)
-    #     return sigma
 
     image_logs = None
     for epoch in range(first_epoch, args.num_train_epochs):
