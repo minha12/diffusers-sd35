@@ -47,6 +47,92 @@ check_min_version("0.33.0.dev0")
 
 logger = get_logger(__name__)
 
+# Taken from [Sayak Paul's Diffusers PR #6511](https://github.com/huggingface/diffusers/pull/6511/files)
+def unwrap_model(model, accelerator):
+    model = accelerator.unwrap_model(model)
+    model = model._orig_mod if is_compiled_module(model) else model
+    return model
+
+
+def save_model_hook(models, weights, output_dir, accelerator):
+    if accelerator.is_main_process:
+        i = len(weights) - 1
+
+        while len(weights) > 0:
+            weights.pop()
+            model = models[i]
+
+            sub_dir = "controlnet"
+            model.save_pretrained(os.path.join(output_dir, sub_dir))
+
+            i -= 1
+
+
+def load_model_hook(models, input_dir):
+    while len(models) > 0:
+        # pop models so that they are not loaded again
+        model = models.pop()
+
+        # load diffusers style into model
+        load_model = SD3ControlNetModel.from_pretrained(input_dir, subfolder="controlnet")
+        model.register_to_config(**load_model.config)
+
+        model.load_state_dict(load_model.state_dict())
+        del load_model
+
+
+def compute_text_embeddings(batch, text_encoders, tokenizers, accelerator, max_sequence_length):
+    with torch.no_grad():
+        prompt = batch["prompts"]
+        prompt_embeds, pooled_prompt_embeds = encode_prompt(
+            text_encoders, tokenizers, prompt, max_sequence_length
+        )
+        prompt_embeds = prompt_embeds.to(accelerator.device)
+        pooled_prompt_embeds = pooled_prompt_embeds.to(accelerator.device)
+    return {"prompt_embeds": prompt_embeds, "pooled_prompt_embeds": pooled_prompt_embeds}
+
+
+def get_sigmas(timesteps, noise_scheduler_copy, accelerator, n_dim=4, dtype=torch.float32):
+    sigmas = noise_scheduler_copy.sigmas.to(device=accelerator.device, dtype=dtype)
+    schedule_timesteps = noise_scheduler_copy.timesteps.to(accelerator.device)
+    
+    # First convert timesteps to the same dtype as schedule_timesteps to ensure exact matching
+    timesteps = timesteps.to(device=accelerator.device, dtype=schedule_timesteps.dtype)
+    
+    step_indices = []
+    for t in timesteps:
+        # Try exact match first
+        matches = (schedule_timesteps == t).nonzero()
+        if len(matches) > 0:
+            # Use the first match if there are any
+            step_indices.append(matches[0].item())
+        else:
+            # Fall back to closest match only if necessary
+            differences = torch.abs(schedule_timesteps - t)
+            index = torch.argmin(differences).item()
+            step_indices.append(index)
+
+    sigma = sigmas[step_indices].flatten()
+    while len(sigma.shape) < n_dim:
+        sigma = sigma.unsqueeze(-1)
+    return sigma
+
+
+def get_stable_cache_key(args):
+    from datasets.fingerprint import Hasher
+    """Only include args that affect embeddings"""
+    cache_relevant_args = {
+        "pretrained_model_name_or_path": args.pretrained_model_name_or_path,
+        "max_sequence_length": args.max_sequence_length,
+        "revision": args.revision,
+        "variant": args.variant,
+        # Add only args that affect embedding computation
+    }
+
+    # Creates same fingerprint for same embedding-relevant args
+    return Hasher.hash(cache_relevant_args)
+
+
 def main(args):
     if args.report_to == "wandb" and args.hub_token is not None:
         raise ValueError(
@@ -179,41 +265,12 @@ def main(args):
     text_encoder_three.requires_grad_(False)
     controlnet.train()
 
-    # Taken from [Sayak Paul's Diffusers PR #6511](https://github.com/huggingface/diffusers/pull/6511/files)
-    def unwrap_model(model):
-        model = accelerator.unwrap_model(model)
-        model = model._orig_mod if is_compiled_module(model) else model
-        return model
-
     # `accelerate` 0.16.0 will have better support for customized saving
     if version.parse(accelerate.__version__) >= version.parse("0.16.0"):
         # create custom saving & loading hooks so that `accelerator.save_state(...)` serializes in a nice format
-        def save_model_hook(models, weights, output_dir):
-            if accelerator.is_main_process:
-                i = len(weights) - 1
-
-                while len(weights) > 0:
-                    weights.pop()
-                    model = models[i]
-
-                    sub_dir = "controlnet"
-                    model.save_pretrained(os.path.join(output_dir, sub_dir))
-
-                    i -= 1
-
-        def load_model_hook(models, input_dir):
-            while len(models) > 0:
-                # pop models so that they are not loaded again
-                model = models.pop()
-
-                # load diffusers style into model
-                load_model = SD3ControlNetModel.from_pretrained(input_dir, subfolder="controlnet")
-                model.register_to_config(**load_model.config)
-
-                model.load_state_dict(load_model.state_dict())
-                del load_model
-
-        accelerator.register_save_state_pre_hook(save_model_hook)
+        accelerator.register_save_state_pre_hook(
+            functools.partial(save_model_hook, accelerator=accelerator)
+        )
         accelerator.register_load_state_pre_hook(load_model_hook)
 
     if args.gradient_checkpointing:
@@ -225,9 +282,9 @@ def main(args):
         " doing mixed precision training, copy of the weights should still be float32."
     )
 
-    if unwrap_model(controlnet).dtype != torch.float32:
+    if unwrap_model(controlnet, accelerator).dtype != torch.float32:
         raise ValueError(
-            f"Controlnet loaded as datatype {unwrap_model(controlnet).dtype}. {low_precision_error_string}"
+            f"Controlnet loaded as datatype {unwrap_model(controlnet, accelerator).dtype}. {low_precision_error_string}"
         )
 
     # Enable TF32 for faster training on Ampere GPUs,
@@ -303,83 +360,26 @@ def main(args):
             torch_dtype=weight_dtype,
         ).to(accelerator.device)
     
-    def compute_text_embeddings(batch, text_encoders, tokenizers):
-        with torch.no_grad():
-            prompt = batch["prompts"]
-            prompt_embeds, pooled_prompt_embeds = encode_prompt(
-                text_encoders, tokenizers, prompt, args.max_sequence_length
-            )
-            prompt_embeds = prompt_embeds.to(accelerator.device)
-            pooled_prompt_embeds = pooled_prompt_embeds.to(accelerator.device)
-        return {"prompt_embeds": prompt_embeds, "pooled_prompt_embeds": pooled_prompt_embeds}
-
     compute_embeddings_fn = functools.partial(
         compute_text_embeddings,
         text_encoders=text_encoders,
         tokenizers=tokenizers,
+        accelerator=accelerator,
+        max_sequence_length=args.max_sequence_length,
     )
     with accelerator.main_process_first():
 
-        # Better approach (stable fingerprint):
-        def get_stable_cache_key(args):
-            from datasets.fingerprint import Hasher
-            """Only include args that affect embeddings"""
-            cache_relevant_args = {
-                "pretrained_model_name_or_path": args.pretrained_model_name_or_path,
-                "max_sequence_length": args.max_sequence_length,
-                "revision": args.revision,
-                "variant": args.variant,
-                # Add only args that affect embedding computation
-            }
-        
-            # Creates same fingerprint for same embedding-relevant args
-            return Hasher.hash(cache_relevant_args)
-    
         # fingerprint used by the cache for the other processes to load the result
-        # details: https://github.com/huggingface/diffusers/pull/4038#discussion_r1266078401
-        # new_fingerprint = Hasher.hash(args)
-        # Debug info before mapping
-
-        # def find_existing_cache_file(cache_dir, prefix="cache-"):
-        #     """Find an existing cache file in the provided directory that matches the prefix."""
-        #     if not cache_dir or not os.path.isdir(cache_dir):
-        #         return None
-            
-        #     cache_files = [f for f in os.listdir(cache_dir) if f.startswith(prefix) and f.endswith('.arrow')]
-        #     if not cache_files:
-        #         return None
-            
-        #     # Return most recent cache file based on modification time
-        #     cache_files.sort(key=lambda f: os.path.getmtime(os.path.join(cache_dir, f)), reverse=True)
-        #     return os.path.join(cache_dir, cache_files[0])
-
-        # Generate fingerprint but check for existing cache first
-        fingerprint = None
+        fingerprint = get_stable_cache_key(args)
         cache_file = None
-
-        # if args.dataset_cache_dir:
-        #     # Look for existing cache files
-        #     existing_cache = find_existing_cache_file(args.dataset_cache_dir)
-        #     if existing_cache:
-        #         # Extract fingerprint from filename (cache_{fingerprint}.arrow)
-        #         cache_filename = os.path.basename(existing_cache)
-        #         if cache_filename.startswith("cache-") and cache_filename.endswith(".arrow"):
-        #             fingerprint = cache_filename[6:-6]  # Remove "cache_" and ".arrow"
-        #             cache_file = existing_cache
-        #             logger.info(f"Found existing cache file with fingerprint: {fingerprint}")
-
-        # If no existing cache was found, generate a new fingerprint
-        if not fingerprint:
-            fingerprint = get_stable_cache_key(args)
-            if args.dataset_cache_dir:
-                cache_file = os.path.join(args.dataset_cache_dir, f"cache-{fingerprint}.arrow")
+        if args.dataset_cache_dir:
+            cache_file = os.path.join(args.dataset_cache_dir, f"cache-{fingerprint}.arrow")
 
         # Debug info
         logger.info(f"Using fingerprint: {fingerprint}")
         logger.info(f"Dataset size before mapping: {len(train_dataset)}")
 
         # Use the fingerprint and cache file in the map operation
-        # train_dataset = datasets.load_from_disk(args.dataset_cache_dir)
         train_dataset = train_dataset.map(
             compute_embeddings_fn,
             batched=True,
@@ -497,31 +497,6 @@ def main(args):
         disable=not accelerator.is_local_main_process,
     )
 
-    def get_sigmas(timesteps, n_dim=4, dtype=torch.float32):
-        sigmas = noise_scheduler_copy.sigmas.to(device=accelerator.device, dtype=dtype)
-        schedule_timesteps = noise_scheduler_copy.timesteps.to(accelerator.device)
-        
-        # First convert timesteps to the same dtype as schedule_timesteps to ensure exact matching
-        timesteps = timesteps.to(device=accelerator.device, dtype=schedule_timesteps.dtype)
-        
-        step_indices = []
-        for t in timesteps:
-            # Try exact match first
-            matches = (schedule_timesteps == t).nonzero()
-            if len(matches) > 0:
-                # Use the first match if there are any
-                step_indices.append(matches[0].item())
-            else:
-                # Fall back to closest match only if necessary
-                differences = torch.abs(schedule_timesteps - t)
-                index = torch.argmin(differences).item()
-                step_indices.append(index)
-
-        sigma = sigmas[step_indices].flatten()
-        while len(sigma.shape) < n_dim:
-            sigma = sigma.unsqueeze(-1)
-        return sigma
-
     image_logs = None
     for epoch in range(first_epoch, args.num_train_epochs):
         for step, batch in enumerate(train_dataloader):
@@ -549,7 +524,7 @@ def main(args):
 
                 # Add noise according to flow matching.
                 # zt = (1 - texp) * x + texp * z1
-                sigmas = get_sigmas(timesteps, n_dim=model_input.ndim, dtype=model_input.dtype)
+                sigmas = get_sigmas(timesteps, noise_scheduler_copy, accelerator, n_dim=model_input.ndim, dtype=model_input.dtype)
                 noisy_model_input = (1.0 - sigmas) * model_input + sigmas * noise
                 
                 # Make sure all inputs are the same dtype
@@ -667,7 +642,7 @@ def main(args):
     # Create the pipeline using using the trained modules and save it.
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
-        controlnet = unwrap_model(controlnet)
+        controlnet = unwrap_model(controlnet, accelerator)
         controlnet.save_pretrained(args.output_dir)
 
         if args.push_to_hub:
