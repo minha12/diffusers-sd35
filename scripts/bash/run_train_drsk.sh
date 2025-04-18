@@ -5,7 +5,7 @@ export MODEL_DIR="${BASE_DIR}/models/stabilityai/stable-diffusion-3-medium-diffu
 export OUTPUT_DIR="sd3.5-controlnet-out-drsk"
 export CACHE_DIR="${BASE_DIR}/datasets/drsk/cache-sd3.5-full"
 export DATASET_DIR="${BASE_DIR}/datasets/drsk"
-export SCRIPT_PATH="./scripts/drsk.py"
+export SCRIPT_PATH="./src/datasets/drsk.py"
 
 accelerate launch --config_file accelerate_config.yaml src/training/train_controlnet_sd35.py \
     --pretrained_model_name_or_path=$MODEL_DIR \
