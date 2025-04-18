@@ -9,3 +9,5 @@ __pycache__/
 *.swp
 *.bak
 *.tmp
+
+sd3.5-controlnet-out-drsk/
