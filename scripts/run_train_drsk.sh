@@ -21,7 +21,9 @@ accelerate launch --config_file accelerate_config.yaml train_controlnet_sd35.py 
     --validation_prompt "pathology image: tissue unknown 12.73%, dermis normal skin 22.91%, skin appendage structure normal skin 61.62%" "pathology image: dermis normal skin 47.76%, skin appendage structure normal skin 51.06%" \
     --validation_steps=300 \
     --num_validation_images=4 \
-    --train_batch_size=2 \
+    --train_batch_size=1 \
     --gradient_accumulation_steps=4 \
-    --use_8bit_adam
+    --use_8bit_adam \
+    --gradient_checkpointing \
+    --mixed_precision bf16
 
