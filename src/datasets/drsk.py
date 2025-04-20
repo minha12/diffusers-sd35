@@ -10,7 +10,7 @@ class DRSK(datasets.GeneratorBasedBuilder):
     def __init__(self, config_path=None, **kwargs):
         # Default config path if not provided
         if config_path is None:
-            config_path = os.path.join(os.path.dirname(__file__), "config", "drsk_config.yaml")
+            config_path = os.path.join("./configs", "drsk_config.yaml")
         
         # Load config from YAML
         with open(config_path, "r") as f:
