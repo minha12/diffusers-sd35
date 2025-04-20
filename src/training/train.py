@@ -37,7 +37,7 @@ from diffusers.utils.torch_utils import is_compiled_module
 from src.utils.log_validation import log_validation
 from src.utils.make_train_dataset import make_train_dataset
 from src.utils.parse_args import parse_args
-from src.utils.utils import collate_fn, encode_prompt, import_model_class_from_model_name_or_path, load_text_encoders, save_model_card
+from src.utils.utils import encode_prompt, import_model_class_from_model_name_or_path, load_text_encoders, save_model_card
 
 
 if is_wandb_available():
@@ -338,12 +338,12 @@ def main(args):
     text_encoder_two.to(accelerator.device, dtype=weight_dtype)
     text_encoder_three.to(accelerator.device, dtype=weight_dtype)
 
-    train_dataset = make_train_dataset(args, tokenizer_one, tokenizer_two, tokenizer_three, accelerator, logger)
+    train_dataset, preprocess_train = make_train_dataset(args, tokenizer_one, tokenizer_two, tokenizer_three, accelerator, logger)
 
     tokenizers = [tokenizer_one, tokenizer_two, tokenizer_three]
     text_encoders = [text_encoder_one, text_encoder_two, text_encoder_three]
 
-    # Create pipeline before training loop - MOVED UP HERE
+    # Create pipeline before training loop
     pipeline = None
     if args.validation_prompt is not None:
         pipeline = StableDiffusion3ControlNetPipeline.from_pretrained(
@@ -360,46 +360,130 @@ def main(args):
             torch_dtype=weight_dtype,
         ).to(accelerator.device)
     
-    compute_embeddings_fn = functools.partial(
-        compute_text_embeddings,
-        text_encoders=text_encoders,
-        tokenizers=tokenizers,
-        accelerator=accelerator,
-        max_sequence_length=args.max_sequence_length,
-    )
-    with accelerator.main_process_first():
-
-        # fingerprint used by the cache for the other processes to load the result
-        fingerprint = get_stable_cache_key(args)
-        cache_file = None
-        if args.dataset_cache_dir:
-            cache_file = os.path.join(args.dataset_cache_dir, f"cache-{fingerprint}.arrow")
-
-        # Debug info
-        logger.info(f"Using fingerprint: {fingerprint}")
-        logger.info(f"Dataset size before mapping: {len(train_dataset)}")
-
-        # Use the fingerprint and cache file in the map operation
-        train_dataset = train_dataset.map(
-            compute_embeddings_fn,
-            batched=True,
-            batch_size=args.dataset_preprocess_batch_size,
-            load_from_cache_file=True,
-            cache_file_name=cache_file,
-            new_fingerprint=fingerprint
-        )
-
-        # Debug info after mapping
-        logger.info("Dataset size after mapping: %d", len(train_dataset))
+    # Check if cache directory exists
+    cached_dataset_loaded = False
+    if args.dataset_cache_dir:
+        # Try to load the latest cache path from the cache directory
+        latest_cache_path_file = os.path.join(args.dataset_cache_dir, "latest_cache_path.txt")
+        
+        # Try to load from the latest_cache_path if available
+        if os.path.exists(latest_cache_path_file):
+            try:
+                with open(latest_cache_path_file, 'r') as f:
+                    latest_cache_path = f.read().strip()
+                
+                if os.path.exists(latest_cache_path):
+                    from datasets import load_from_disk
+                    logger.info(f"Attempting to load cached dataset from: {latest_cache_path}")
+                    train_dataset = load_from_disk(latest_cache_path)
+                    logger.info(f"Successfully loaded cached dataset with {len(train_dataset)} examples")
+                    cached_dataset_loaded = True
+            except Exception as e:
+                logger.warning(f"Failed to load dataset from latest cache path: {e}")
     
-        # Check if cache was actually used
-        cache_files = train_dataset.cache_files
-        logger.info("Cache files used: %s", cache_files)
-
+    # Only proceed with mapping and generate fingerprint if cache wasn't loaded successfully
+    if not cached_dataset_loaded:
+        logger.info("Cache not found or couldn't be loaded. Computing embeddings...")
+        
+        # Generate fingerprint only when we need to compute embeddings
+        fingerprint = get_stable_cache_key(args)
+        logger.info(f"Generated fingerprint for embeddings: {fingerprint}")
+        
+        # Check for exact fingerprint match if we didn't find a cache yet
+        if args.dataset_cache_dir:
+            # Check if there's a directory with the exact fingerprint
+            possible_cache_dir = os.path.join(args.dataset_cache_dir, f"cache_{fingerprint}")
+            if os.path.exists(possible_cache_dir):
+                logger.info(f"Found exact cache directory: {possible_cache_dir}")
+                try:
+                    from datasets import load_from_disk
+                    logger.info(f"Attempting to load cached dataset from: {possible_cache_dir}")
+                    train_dataset = load_from_disk(possible_cache_dir)
+                    logger.info(f"Successfully loaded cached dataset with {len(train_dataset)} examples")
+                    cached_dataset_loaded = True
+                except Exception as e:
+                    logger.warning(f"Failed to load cached dataset: {e}")
+        
+        # If we still need to compute embeddings
+        if not cached_dataset_loaded:
+            cache_file = None
+            if args.dataset_cache_dir:
+                cache_file = os.path.join(args.dataset_cache_dir, f"cache-{fingerprint}.arrow")
+                
+            compute_embeddings_fn = functools.partial(
+                compute_text_embeddings,
+                text_encoders=text_encoders,
+                tokenizers=tokenizers,
+                accelerator=accelerator,
+                max_sequence_length=args.max_sequence_length,
+            )
+            
+            with accelerator.main_process_first():
+                # Debug info
+                logger.info(f"Dataset size before mapping: {len(train_dataset)}")
+                
+                # Use the fingerprint and cache file in the map operation
+                train_dataset = train_dataset.map(
+                    compute_embeddings_fn,
+                    batched=True,
+                    batch_size=args.dataset_preprocess_batch_size,
+                    load_from_cache_file=True,
+                    cache_file_name=cache_file,
+                    new_fingerprint=fingerprint
+                )
+                
+                # Debug info after mapping
+                logger.info(f"Dataset size after mapping: {len(train_dataset)}")
+                
+                # Check if cache was actually used
+                cache_files = train_dataset.cache_files
+                logger.info(f"Cache files used: {cache_files}")
+                
+                # Update the latest cache path file so we can find it next time
+                if args.dataset_cache_dir and accelerator.is_main_process and cache_file:
+                    latest_cache_path_file = os.path.join(args.dataset_cache_dir, "latest_cache_path.txt")
+                    with open(latest_cache_path_file, 'w') as f:
+                        f.write(cache_file)
+                    logger.info(f"Updated latest cache path to: {cache_file}")
+    
     # Now safe to delete encoders and tokenizers
     del text_encoder_one, text_encoder_two, text_encoder_three
     del tokenizer_one, tokenizer_two, tokenizer_three
     free_memory()
+
+    def collate_fn(examples):
+        # Apply preprocess_train to each example if needed
+        processed_examples = []
+        
+        for example in examples:
+            # Check if the example already has the required fields
+            if "pixel_values" not in example or "conditioning_pixel_values" not in example or "prompts" not in example:
+                # If not, create a batch-like structure for a single example
+                batch_like = {k: [v] for k, v in example.items()}
+                processed_batch = preprocess_train(batch_like)
+                # Extract the single processed example from the batch result
+                processed_example = {k: v[0] if isinstance(v, list) and len(v) > 0 else v 
+                                    for k, v in processed_batch.items()}
+                processed_examples.append(processed_example)
+            else:
+                processed_examples.append(example)
+        
+        # Stack the processed examples
+        pixel_values = torch.stack([example["pixel_values"] for example in processed_examples])
+        pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
+
+        conditioning_pixel_values = torch.stack([example["conditioning_pixel_values"] for example in processed_examples])
+        conditioning_pixel_values = conditioning_pixel_values.to(memory_format=torch.contiguous_format).float()
+        
+        prompt_embeds = torch.stack([torch.tensor(example["prompt_embeds"]) for example in processed_examples])
+        pooled_prompt_embeds = torch.stack([torch.tensor(example["pooled_prompt_embeds"]) for example in processed_examples])
+
+        return {
+            "pixel_values": pixel_values,
+            "conditioning_pixel_values": conditioning_pixel_values,
+            "prompt_embeds": prompt_embeds,
+            "pooled_prompt_embeds": pooled_prompt_embeds,
+        }
 
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
