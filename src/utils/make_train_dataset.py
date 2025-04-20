@@ -20,6 +20,7 @@ def make_train_dataset(args, tokenizer_one, tokenizer_two, tokenizer_three, acce
 
     Returns:
         train_dataset: The preprocessed training dataset.
+        preprocess_train: The preprocessing function for training.
     """
     # Use provided logger or create a new one
     if logger is None:
@@ -141,4 +142,4 @@ def make_train_dataset(args, tokenizer_one, tokenizer_two, tokenizer_three, acce
         # Set the training transforms
         train_dataset = dataset["train"].with_transform(preprocess_train)
 
-    return train_dataset
+    return train_dataset, preprocess_train
