@@ -42,3 +42,7 @@ After setting up the environment, you can run the training script using:
 ```bash
 sbatch run_train_drsk.sh
 ```
+
+```bash
+tensorboard --logdir=./sd3.5-controlnet-out-drsk/logs/train_controlnet/ --host 0.0.0.0
+```
