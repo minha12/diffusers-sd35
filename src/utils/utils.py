@@ -64,7 +64,7 @@ def _encode_prompt_with_t5(
     text_input_ids = text_inputs.input_ids
     prompt_embeds = text_encoder(text_input_ids.to(device))[0]
 
-    dtype = text_encoder.dtype
+    dtype = text_encoder.module.dtype if hasattr(text_encoder, "module") else text_encoder.dtype
     prompt_embeds = prompt_embeds.to(dtype=dtype, device=device)
 
     _, seq_len, _ = prompt_embeds.shape
@@ -99,7 +99,8 @@ def _encode_prompt_with_clip(
 
     pooled_prompt_embeds = prompt_embeds[0]
     prompt_embeds = prompt_embeds.hidden_states[-2]
-    prompt_embeds = prompt_embeds.to(dtype=text_encoder.dtype, device=device)
+    prompt_embeds = prompt_embeds.to(dtype=text_encoder.module.dtype if hasattr(text_encoder, "module") 
+                                     else text_encoder.dtype, device=device)
 
     _, seq_len, _ = prompt_embeds.shape
     # duplicate text embeddings for each generation per prompt, using mps friendly method
