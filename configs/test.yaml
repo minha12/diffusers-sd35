@@ -1,0 +1,11 @@
+version: "0.0.2"
+description: ""
+homepage: ""
+license: ""
+citation: ""
+base_dir: "/home/ubuntu/datasets/test"
+jsonl_path: "prompt.json"
+field_names:
+  text: "prompt"
+  image: "target"
+  conditioning_image: "source"
