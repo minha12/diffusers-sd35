@@ -1,13 +1,14 @@
 #!/bin/bash
 
 export BASE_DIR="/home/ubuntu"
+export DATASET_NAME="drsk"
 export MODEL_DIR="${BASE_DIR}/models/stabilityai/stable-diffusion-3-medium-diffusers"
-export OUTPUT_DIR="sd3.5-controlnet-out-drsk"
-export CACHE_DIR="${BASE_DIR}/datasets/drsk/cache-sd3.5-full"
-export DATASET_DIR="${BASE_DIR}/datasets/drsk"
-export SCRIPT_PATH="./src/datasets/drsk.py"
+export OUTPUT_DIR="sd3.5-controlnet-out-${DATASET_NAME}"
+export CACHE_DIR="${BASE_DIR}/datasets/${DATASET_NAME}/cache-sd3.5-${DATASET_NAME}"
+export DATASET_DIR="${BASE_DIR}/datasets/${DATASET_NAME}"
+export SCRIPT_PATH="./src/datasets/${DATASET_NAME}.py"
 
-accelerate launch --config_file accelerate_config.yaml src/training/train.py \
+accelerate launch --config_file configs/accelerate_config.yaml src/training/train.py \
     --pretrained_model_name_or_path=$MODEL_DIR \
     --output_dir=$OUTPUT_DIR \
     --train_data_dir=$DATASET_DIR \
