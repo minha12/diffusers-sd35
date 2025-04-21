@@ -1,0 +1,34 @@
+# Configuration for SD3 ControlNet training
+
+# Dataset settings
+dataset_name: "drsk"
+dataset_dir: "/home/ubuntu/datasets/{dataset_name}"
+dataset_cache_dir: "/home/ubuntu/datasets/{dataset_name}/cache-sd3.5-{dataset_name}"
+dataset_script_path: "./src/datasets/{dataset_name}.py"
+
+# Model settings
+pretrained_model_dir: "/home/ubuntu/models/stabilityai/stable-diffusion-3-medium-diffusers"
+output_dir: "results/models/{dataset_name}/sd3.5-controlnet-out-{dataset_name}"
+
+# Training parameters
+resolution: 512
+learning_rate: 1e-5
+dataset_preprocess_batch_size: 64
+max_train_steps: 15000
+train_batch_size: 1
+gradient_accumulation_steps: 4
+
+# Hardware settings
+use_8bit_adam: true
+gradient_checkpointing: true
+mixed_precision: "bf16"
+
+# Validation settings
+validation_steps: 300
+num_validation_images: 4
+validation_images:
+  - "data/validation_images/control_image_1.png"
+  - "data/validation_images/control_image_2.png"
+validation_prompts:
+  - "pathology image: tissue unknown 12.73%, dermis normal skin 22.91%, skin appendage structure normal skin 61.62%"
+  - "pathology image: dermis normal skin 47.76%, skin appendage structure normal skin 51.06%"
